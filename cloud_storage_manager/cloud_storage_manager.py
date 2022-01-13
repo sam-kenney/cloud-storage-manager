@@ -79,7 +79,7 @@ class CloudStorage:
                 to.
 
         return: str
-            A success message.
+            The path to the file downloaded.
         """
         if not gcs_file_name:
             raise ValueError("No file provided")

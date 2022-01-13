@@ -19,8 +19,8 @@ To create your environment, type `virtualenv {your-env}`. Once created, you must
 *   You can also place `git+ssh://github.com/mr-strawberry66/cloud-storage-manager` in a requirements.txt file for a project. 
 
 ### Developing for the library
-*   Install the required Python libraries using `pip3 install -r requirements.txt`.
-*   If you are developing for this tool, install the Python libraries required by running `pip3 install -r dev-requirements.txt`.
+*   Install the required Python libraries using `pip install -r requirements.txt`.
+*   If you are developing for this tool, install the Python libraries required by running `pip install -r dev-requirements.txt`.
 
 *Please ensure to create your environment before you execute any of the installation commands*
 
