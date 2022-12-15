@@ -1,7 +1,9 @@
 """Functions to utilise the Google Cloud Storage client library."""
+from __future__ import annotations
+
 import json
 import os
-from typing import List
+
 from google.cloud import storage
 
 
@@ -12,16 +14,21 @@ class CloudStorage:
         self,
         gcp_project_id: str = None,
         default_bucket: str = None,
-    ) -> None:
+        credentials: str | dict[str, str] = None,
+        deploy_as_cloud_function: bool = False,
+    ) -> CloudStorage:
         """
-        Initialise the Class.
+        # Google Cloud Storage.
 
-        args:
+        Args:
             gcp_project_id: str
                 The GCP project ID
                 to access cloud storage.
                 Will attempt to retrieve
                 this from the environment.
+                Not required if passing in
+                credentials path or dict
+                explicity.
 
             default_bucket: str
                 Use if you are reading and
@@ -29,13 +36,58 @@ class CloudStorage:
                 Is overwritten by the bucket
                 parameter in each other
                 function.
+
+            credentials: str | dict
+                The path to your credentials
+                file or the credentials dict
+                object. If not set, will try
+                to read from the environment.
+
+            deploy_as_cloud_function: bool
+                If set to True, will set client
+                to run as a Google Cloud Function.
         """
         self.gcp_project_id = os.environ.get(
-            "GCP_PROJECT_ID",
+            "GOOGLE_CLOUD_PROJECT_ID",
             gcp_project_id,
         )
-        self.client = storage.Client(self.gcp_project_id)
+
+        self.deploy_as_cloud_function = deploy_as_cloud_function
+        self.credentials = credentials
+
+        self.client = self._client()
         self.default_bucket = default_bucket
+
+    def _client(self):
+        """
+        Try to initialise a Google Cloud platform client.
+
+        If the credentials are not provided,
+        raise a ValueError.
+        """
+        if self.credentials:
+            if isinstance(self.credentials, str):
+                client = storage.Client.from_service_account_json(
+                    json_credentials_path=self.credentials,
+                )
+
+            elif isinstance(self.credentials, dict):
+                client = storage.Client.from_service_account_info(
+                    info=self.credentials,
+                )
+        elif (
+            os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", None)
+            and self.gcp_project_id
+        ):
+            client = storage.Client(self.gcp_project_id)
+
+        elif self.deploy_as_cloud_function and self.gcp_project_id:
+            client = storage.Client(self.gcp_project_id)
+
+        else:
+            raise ValueError("Could not determine Google Cloud Platform credentials.")
+
+        return client
 
     def _set_bucket(self, bucket: str) -> str:
         """
@@ -45,7 +97,7 @@ class CloudStorage:
             A bucket provided in a read/write
             function.
 
-        return: str
+        Returns: str
             The correct bucket to use.
 
         except: ValueError
@@ -65,7 +117,7 @@ class CloudStorage:
         """
         Download a file from Google Cloud Storage.
 
-        args:
+        Args:
             bucket: str
                 The bucket to collect the
                 file from.
@@ -78,7 +130,7 @@ class CloudStorage:
                 Where to write the file
                 to.
 
-        return: str
+        Returns: str
             The path to the file downloaded.
         """
         if not gcs_file_name:
@@ -99,7 +151,7 @@ class CloudStorage:
         """
         Read the contents of a file from Cloud Storage.
 
-        args:
+        Args:
             bucket: str
                 The bucket to collect the
                 file from.
@@ -113,7 +165,7 @@ class CloudStorage:
                 in the file. Defaults to
                 utf-8.
 
-        return: str
+        Returns: str
             The contents of the file.
         """
         if not gcs_file_name:
@@ -130,11 +182,11 @@ class CloudStorage:
         bucket: str = None,
         gcs_file_name: str = None,
         encoding: str = "utf-8",
-    ) -> List[dict]:
+    ) -> list[dict[any, any]]:
         """
         Read the contents of a json file from Cloud Storage.
 
-        args:
+        Args:
             bucket: str
                 The bucket to collect the
                 file from.
@@ -148,7 +200,7 @@ class CloudStorage:
                 in the file. Defaults to
                 utf-8.
 
-        return: List[dict]
+        Returns: list[dict]
             The loaded contents of the file.
         """
         data = self.read_text(
@@ -163,11 +215,11 @@ class CloudStorage:
         bucket: str = None,
         gcs_file_name: str = None,
         encoding: str = "utf-8",
-    ) -> List[dict]:
+    ) -> list[dict[any, any]]:
         """
         Read the contents of a newline delimited json file from Cloud Storage.
 
-        args:
+        Args:
             bucket: str
                 The bucket to collect the
                 file from.
@@ -181,7 +233,7 @@ class CloudStorage:
                 in the file. Defaults to
                 utf-8.
 
-        return: List[dict]
+        Returns: list[dict]
             The loaded contents of the file.
         """
         data = self.read_text(
@@ -200,7 +252,7 @@ class CloudStorage:
         """
         Upload a file to Cloud Storage.
 
-        args:
+        Args:
             bucket: str
                 The bucket to upload the
                 file to.
@@ -215,7 +267,7 @@ class CloudStorage:
                 to True. Will run file cleanup
                 if True.
 
-        return: str
+        Returns: str
             A success message.
 
         except: ValueError
@@ -235,16 +287,52 @@ class CloudStorage:
             blob.upload_from_filename(file_name)
         return "Success"
 
+    def upload_from_string(
+        self,
+        bucket: str = None,
+        file_name: str = None,
+        data: str = None,
+    ):
+        """
+        Upload a file to Cloud Storage.
+
+        Args:
+            bucket: str
+                The bucket to upload the
+                file to.
+
+            file_name: str
+                The name of the file to
+                upload to Cloud Storage.
+
+            data: str
+                The data to write to the file.
+
+        Returns: str
+            A success message.
+
+        except: ValueError
+            If no file is provided.
+        """
+        if not file_name:
+            raise ValueError("No file provided")
+        gcs_bucket = self.client.get_bucket(
+            self._set_bucket(bucket),
+        )
+        blob = gcs_bucket.blob(file_name)
+        blob.upload_from_string(data)
+        return "Success"
+
     def upload_text(
         self,
-        data: any,
+        data: str,
         file_name: str,
         bucket: str = None,
     ):
         """
         Upload data to Cloud Storage.
 
-        args:
+        Args:
             data: str
                 The data to write.
 
@@ -256,7 +344,7 @@ class CloudStorage:
                 The bucket to write the
                 data to.
 
-        return: str
+        Returns: str
             A success message.
         """
         self._create_tmp_file(
@@ -271,14 +359,14 @@ class CloudStorage:
 
     def upload_json(
         self,
-        data: List[dict],
+        data: list[dict[any, any]],
         file_name: str,
         bucket: str = None,
     ):
         """
         Upload data to Cloud Storage as a json file.
 
-        args:
+        Args:
             data: str
                 The data to write.
 
@@ -290,7 +378,7 @@ class CloudStorage:
                 The bucket to write the
                 data to.
 
-        return: str
+        Returns: str
             A success message.
         """
         self._create_tmp_file(
@@ -314,16 +402,16 @@ class CloudStorage:
             file.write(data)
         return file_name
 
-    def upload_ndjson(
+    def upload_ndjson_file(
         self,
-        data: List[dict],
+        data: list[dict[any, any]],
         file_name: str,
         bucket: str = None,
     ):
         """
         Upload data to Cloud Storage as a newline delimited json file.
 
-        args:
+        Args:
             data: str
                 The data to write.
 
@@ -335,7 +423,7 @@ class CloudStorage:
                 The bucket to write the
                 data to.
 
-        return: str
+        Returns: str
             A success message.
         """
         self._create_ndjson_tmp_file(
@@ -350,7 +438,7 @@ class CloudStorage:
 
     def _create_ndjson_tmp_file(
         self,
-        data: List[dict],
+        data: list[dict[any, any]],
         file_name: str,
     ) -> str:
         """Create a newline delimited json file."""
@@ -359,3 +447,46 @@ class CloudStorage:
             for row in data:
                 file.writelines(json.dumps(row) + "\n")
         return file_name
+
+    def upload_ndjson(
+        self,
+        data: list[dict[any, any]],
+        file_name: str,
+        bucket: str = None,
+    ):
+        """
+        Upload data to Cloud Storage as a newline delimited json file.
+
+        Args:
+            data: str
+                The data to write.
+
+            file_name: str
+                The name to give the file
+                in Cloud Storage.
+
+            bucket: str
+                The bucket to write the
+                data to.
+
+        Returns: str
+            A success message.
+        """
+        ndjson = self._create_ndjson_string(
+            data=data,
+        )
+        return self.upload_from_string(
+            data=ndjson,
+            file_name=file_name,
+            bucket=bucket,
+        )
+
+    def _create_ndjson_string(
+        self,
+        data: list[dict[any, any]],
+    ) -> str:
+        """Create a newline delimited json string."""
+        ndjson = ""
+        for row in data:
+            ndjson += json.dumps(row) + "\n"
+        return ndjson
